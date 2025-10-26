@@ -476,8 +476,11 @@ To see full log file please open {LOG_PATH}\\{os.path.basename(logging.getLogger
                 # Export to DWG
                 self.export_to_dwg(enhanced_layer, dwg_path)
                 
-                # Send notification email
-                self.send_notification_email()
+                # Send notification email ONLY if changes were found (not for first run without existing DWG)
+                if changes_found:
+                    self.send_notification_email()
+                else:
+                    self.logger.info("First run - DWG created but no email sent")
                 
                 self.logger.info("Conversion process completed successfully")
             else:
