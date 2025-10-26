@@ -14,7 +14,7 @@ def main():
     try:
         # Set ArcGIS environment
         arcpy.env.overwriteOutput = True
-        arcpy.env.workspace = arcpy.env.scratchGDB
+        # arcpy.env.workspace = arcpy.env.scratchGDB
         
         # Create enhanced converter instance and run
         converter = PostgresToDWGConverter()

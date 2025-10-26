@@ -72,18 +72,13 @@ class PostgresToDWGConverter:
             
             # Initialize structure to hold all feature classes
             dwg_structure = {
-                'annotation': None,
-                'point': None,
-                'polygon': None,
-                'polyline': None,
-                'multipatch': None,
-                'attribute_table': None,
                 'all_feature_classes': {}
             }
             
             # List all feature classes in the DWG
             try:
-                feature_classes = arcpy.ListFeatureClasses(feature_dataset=dwg_path)
+                arcpy.env.workspace = dwg_path
+                feature_classes= arcpy.ListFeatureClasses()
                 self.logger.info(f"Found {len(feature_classes)} feature classes in DWG")
                 
                 for fc_path in feature_classes:
@@ -153,7 +148,7 @@ class PostgresToDWGConverter:
                 return True
             
             # Get the attribute table from DWG structure
-            dwg_attribute_table = dwg_structure.get('attribute_table')
+            dwg_attribute_table = dwg_structure.get('all_feature_classes').get('gis_nafot_GIS_NAFOT')
             if not dwg_attribute_table:
                 self.logger.warning("No attribute table found in DWG structure")
                 self.changes_found = True
@@ -163,7 +158,11 @@ class PostgresToDWGConverter:
             # Read DWG attribute data
             dwg_features = {}
             try:
-                with arcpy.da.SearchCursor(dwg_attribute_table, ["OID@"] + pg_fields) as cursor:
+                dwg_attribute_table_path = os.path.join(TARGET_PATH, DWG_FILE_NAME, dwg_attribute_table)
+                # fields = [f.name for f in arcpy.ListFields(dwg_attribute_table_path)]
+                # print(fields)
+                fields = [f for f in (["OID@"] + pg_fields) if f not in ['globalid', 'objectid', 'st_area(shape)', 'st_length(shape)']]
+                with arcpy.da.SearchCursor(dwg_attribute_table_path,fields) as cursor:
                     for row in cursor:
                         oid = row[0]
                         attributes = row[1:]
@@ -180,7 +179,8 @@ class PostgresToDWGConverter:
             
             # Get geometry from polygon feature class if available
             dwg_geometries = {}
-            polygon_fc = dwg_structure.get('polygon')
+            dwg_attribute_table = dwg_structure.get('all_feature_classes').get('gis_nafot_GIS_NAFOT')
+            polygon_fc = dwg_structure.get('all_feature_classes').get('polygon')
             if polygon_fc and arcpy.Exists(polygon_fc):
                 try:
                     with arcpy.da.SearchCursor(polygon_fc, ["OID@", "SHAPE@"]) as cursor:
