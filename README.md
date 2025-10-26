@@ -91,3 +91,4 @@ The tool only writes to:
 - Temporary directory: Temporary GDB files (automatically cleaned up)
 
 No database write permissions are required.
+
