@@ -195,19 +195,19 @@ class PostgresToDWGConverter:
             # Compare features
             changes_found = False
             
-            # Check for new features in PostGIS
-            for oid in pg_features:
-                if oid not in dwg_features:
-                    changes_found = True
-                    self.update_details.append(f"New feature found: OID {oid}")
-                    self.logger.info(f"New feature found: OID {oid}")
+            # # Check for new features in PostGIS
+            # for oid in pg_features:
+            #     if oid not in dwg_features:
+            #         changes_found = True
+            #         self.update_details.append(f"New feature found: OID {oid}")
+            #         self.logger.info(f"New feature found: OID {oid}")
                     
-            # Check for removed features
-            for oid in dwg_features:
-                if oid not in pg_features:
-                    changes_found = True
-                    self.update_details.append(f"Feature removed: OID {oid}")
-                    self.logger.info(f"Feature removed: OID {oid}")
+            # # Check for removed features
+            # for oid in dwg_features:
+            #     if oid not in pg_features:
+            #         changes_found = True
+            #         self.update_details.append(f"Feature removed: OID {oid}")
+            #         self.logger.info(f"Feature removed: OID {oid}")
                     
             # Check for modified features
             for oid in pg_features:
@@ -339,17 +339,7 @@ def get_merchav_string(merchav):
             polygon_fc = os.path.join(temp_gdb, f"{TABLE_SOURCE}_Polygon")
             arcpy.management.CopyFeatures(temp_fc, polygon_fc)
             
-            # 2. Create point feature class (extract points from polygons)
-            point_fc = os.path.join(temp_gdb, f"{TABLE_SOURCE}_Point")
-            try:
-                # Convert polygon centroids to points
-                arcpy.analysis.FeatureToPoint(polygon_fc, point_fc, "INSIDE")
-            except Exception as e:
-                self.logger.warning(f"Could not create point feature class: {str(e)}")
-                # Create empty point feature class
-                arcpy.management.CreateFeatureclass(temp_gdb, f"{TABLE_SOURCE}_Point", "POINT")
-            
-            # 3. Create polyline feature class (extract boundaries)
+            # 2. Create polyline feature class (extract boundaries)
             polyline_fc = os.path.join(temp_gdb, f"{TABLE_SOURCE}_Polyline")
             try:
                 # Convert polygon boundaries to polylines
@@ -359,25 +349,24 @@ def get_merchav_string(merchav):
                 # Create empty polyline feature class
                 arcpy.management.CreateFeatureclass(temp_gdb, f"{TABLE_SOURCE}_Polyline", "POLYLINE")
             
-            # 4. Create annotation feature class (empty for now)
+            # 3. Create annotation feature class (empty for now)
             annotation_fc = os.path.join(temp_gdb, f"{TABLE_SOURCE}_Annotation")
             arcpy.management.CreateFeatureclass(temp_gdb, f"{TABLE_SOURCE}_Annotation", "POINT")
             
-            # 5. Create multipatch feature class (empty for now)
+            # 4. Create multipatch feature class (empty for now)
             multipatch_fc = os.path.join(temp_gdb, f"{TABLE_SOURCE}_Multipatch")
             arcpy.management.CreateFeatureclass(temp_gdb, f"{TABLE_SOURCE}_Multipatch", "MULTIPATCH")
             
-            # 6. Create the attribute table (copy of original with all attributes)
+            # 5. Create the attribute table (copy of original with all attributes)
             attribute_fc = os.path.join(temp_gdb, f"{TABLE_SOURCE}_GIS_NAFOT")
             arcpy.management.CopyFeatures(temp_fc, attribute_fc)
             
             # Export all feature classes to DWG
             feature_classes_to_export = [
-                polygon_fc,
-                point_fc, 
-                polyline_fc,
-                annotation_fc,
-                multipatch_fc,
+                # polygon_fc,
+                # polyline_fc,
+                # annotation_fc,
+                # multipatch_fc,
                 attribute_fc
             ]
             
