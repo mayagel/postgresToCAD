@@ -1,9 +1,0 @@
-# ArcGIS Python API (install via ArcGIS Pro or ArcGIS Server)
-# arcpy
-
-# Additional dependencies that might be needed
-# (These are typically included with ArcGIS installation)
-# numpy
-# pandas
-# matplotlib
-
