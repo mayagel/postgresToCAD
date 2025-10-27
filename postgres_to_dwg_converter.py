@@ -3,7 +3,7 @@ PostgreSQL to DWG Converter
 Converts PostGIS table to DWG format with comparison and update detection
 """
 
-import arcpy
+import arcpy, json
 import os
 import sys
 import logging
@@ -13,6 +13,21 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
+def _to_2d(geom: arcpy.Geometry) -> arcpy.Geometry:
+    """Return a 2D version of the geometry (drops Z and M) preserving SR."""
+    j = json.loads(geom.JSON)
+
+    # Drop Z/M flags
+    j['hasZ'] = False
+    j['hasM'] = False
+
+    def strip_zm_coords(seq):
+        # seq is a list of coordinates: [x,y] or [x,y,z] or [x,y,z,m]
+        return [c[:2] for c in seq]
+
+    j['rings'] = [strip_zm_coords(r) for r in j['rings']]
+   
+    return arcpy.AsShape(j, True)
 
 class PostgresToDWGConverter:
     def __init__(self):
@@ -116,7 +131,7 @@ class PostgresToDWGConverter:
         except Exception as e:
             self.logger.error(f"Failed to read DWG feature classes: {str(e)}")
             return None
-            
+
     def compare_features(self, pg_layer, dwg_structure):
         """Compare features between PostGIS and DWG structure"""
         try:
@@ -159,12 +174,12 @@ class PostgresToDWGConverter:
             dwg_features = {}
             try:
                 dwg_attribute_table_path = os.path.join(TARGET_PATH, DWG_FILE_NAME, dwg_attribute_table)
-                # fields = [f.name for f in arcpy.ListFields(dwg_attribute_table_path)]
-                # print(fields)
-                fields = [f for f in (["OID@"] + pg_fields) if f not in ['globalid', 'objectid', 'st_area(shape)', 'st_length(shape)']]
-                with arcpy.da.SearchCursor(dwg_attribute_table_path,fields) as cursor:
+                dwg_fields = [f.name for f in arcpy.ListFields(dwg_attribute_table_path)]
+                print(dwg_fields)
+                # fields = [f for f in (["OID@"] + pg_fields) if f not in ['globalid', 'objectid', 'st_area(shape)', 'st_length(shape)']]
+                with arcpy.da.SearchCursor(dwg_attribute_table_path,dwg_fields) as cursor:
                     for row in cursor:
-                        oid = row[0]
+                        oid = row[-1]
                         attributes = row[1:]
                         dwg_features[oid] = {
                             'attributes': attributes
@@ -181,11 +196,11 @@ class PostgresToDWGConverter:
             dwg_geometries = {}
             dwg_attribute_table = dwg_structure.get('all_feature_classes').get('gis_nafot_GIS_NAFOT')
             polygon_fc = dwg_structure.get('all_feature_classes').get('polygon')
-            if polygon_fc and arcpy.Exists(polygon_fc):
+            if dwg_attribute_table and arcpy.Exists(dwg_attribute_table):
                 try:
-                    with arcpy.da.SearchCursor(polygon_fc, ["OID@", "SHAPE@"]) as cursor:
+                    with arcpy.da.SearchCursor(dwg_attribute_table, ["OID@", "SHAPE@", "Oid_1"]) as cursor:
                         for row in cursor:
-                            oid = row[0]
+                            oid = row[2]
                             geometry = row[1]
                             dwg_geometries[oid] = geometry
                     self.logger.info(f"Found {len(dwg_geometries)} geometries in DWG polygon feature class")
@@ -195,19 +210,19 @@ class PostgresToDWGConverter:
             # Compare features
             changes_found = False
             
-            # # Check for new features in PostGIS
-            # for oid in pg_features:
-            #     if oid not in dwg_features:
-            #         changes_found = True
-            #         self.update_details.append(f"New feature found: OID {oid}")
-            #         self.logger.info(f"New feature found: OID {oid}")
+            # Check for new features in PostGIS
+            for oid in pg_features:
+                if oid not in dwg_features:
+                    changes_found = True
+                    self.update_details.append(f"New feature found: OID {oid}")
+                    self.logger.info(f"New feature found: OID {oid}")
                     
-            # # Check for removed features
-            # for oid in dwg_features:
-            #     if oid not in pg_features:
-            #         changes_found = True
-            #         self.update_details.append(f"Feature removed: OID {oid}")
-            #         self.logger.info(f"Feature removed: OID {oid}")
+            # Check for removed features
+            for oid in dwg_features:
+                if oid not in pg_features:
+                    changes_found = True
+                    self.update_details.append(f"Feature removed: OID {oid}")
+                    self.logger.info(f"Feature removed: OID {oid}")
                     
             # Check for modified features
             for oid in pg_features:
@@ -217,26 +232,24 @@ class PostgresToDWGConverter:
                     
                     # Compare geometry if available in DWG
                     if oid in dwg_geometries:
-                        if not pg_feature['geometry'].equals(dwg_geometries[oid]):
+                        if not (_to_2d(pg_feature['geometry'])).equals((_to_2d(dwg_geometries[oid]))):
                             changes_found = True
                             self.update_details.append(f"Geometry changed for OID {oid}")
                             self.logger.info(f"Geometry changed for OID {oid}")
                     
                     # Compare attributes (excluding filtered columns)
                     for i, field_name in enumerate(pg_feature['field_names']):
-                        if field_name not in COLUMNS_FILTER:
-                            if pg_feature['attributes'][i] != dwg_feature['attributes'][i]:
+                        if field_name in COLUMNS_FILTER:
+                            if field_name not in dwg_fields:
                                 changes_found = True
-                                self.update_details.append(f"Attribute '{field_name}' changed for OID {oid}")
-                                self.logger.info(f"Attribute '{field_name}' changed for OID {oid}")
-            
-            # Check if DWG structure is complete
-            expected_fcs = ['annotation', 'point', 'polygon', 'polyline', 'multipatch', 'attribute_table']
-            missing_fcs = [fc for fc in expected_fcs if dwg_structure.get(fc) is None]
-            if missing_fcs:
-                changes_found = True
-                self.update_details.append(f"Missing feature classes in DWG: {missing_fcs}")
-                self.logger.info(f"Missing feature classes in DWG: {missing_fcs}")
+                                self.update_details.append(f"field_name '{field_name}' not exists in dwg")
+                                self.logger.info(f"field_name '{field_name}' not exists in dwg")
+                            else:
+                                i_for_dwg = dwg_fields.index(field_name)
+                                if pg_feature['attributes'][i] != dwg_feature['attributes'][i_for_dwg - 1]:
+                                    changes_found = True
+                                    self.update_details.append(f"Attribute '{field_name}' changed for OID {oid}")
+                                    self.logger.info(f"Attribute '{field_name}' changed for OID {oid}")
                                 
             self.changes_found = changes_found
             self.logger.info(f"Comparison complete. Changes found: {changes_found}")
@@ -246,37 +259,97 @@ class PostgresToDWGConverter:
             self.logger.error(f"Error during feature comparison: {str(e)}")
             raise
             
-    def add_merchav_mapping(self, pg_layer):
-        """Add merchav_string column with mapping using CalculateField"""
-        try:
-            self.logger.info("Adding merchav_string column...")
+#     def add_merchav_mapping(self, pg_layer):
+#         """Add merchav_string column with mapping using CalculateField"""
+#         try:
+#             self.logger.info("Adding merchav_string column...")
             
+#             # Check if merchav column exists
+#             fields = [field.name for field in arcpy.ListFields(pg_layer)]
+#             if 'merchav' not in fields:
+#                 self.logger.warning("'merchav' column not found in source table")
+#                 return pg_layer
+                
+#             # Create a temporary feature class with the new column
+#             comparison_dir = os.path.join(TARGET_PATH, COMPARISON_GDB)
+#             os.makedirs(comparison_dir, exist_ok=True)
+#             temp_gdb = os.path.join(comparison_dir, "temp_with_merchav.gdb")
+            
+#             # Delete existing GDB if it exists
+#             if arcpy.Exists(temp_gdb):
+#                 arcpy.management.Delete(temp_gdb)
+            
+#             # Create new GDB
+#             arcpy.management.CreateFileGDB(comparison_dir, "temp_with_merchav.gdb")
+            
+#             temp_fc = os.path.join(temp_gdb, "temp_layer")
+            
+#             # Copy the original layer
+#             arcpy.management.CopyFeatures(pg_layer, temp_fc)
+            
+#             # Add the new field
+#             arcpy.management.AddField(temp_fc, "merchav_string", "TEXT", field_length=50)
+            
+#             # Build a code block with the mapping logic
+#             code_block = f"""
+# def get_merchav_string(merchav):
+#     mapping = {merchav_MAPPING}
+#     if merchav in mapping:
+#         return mapping[merchav]
+#     elif merchav is not None:
+#         return f'Unknown_{{merchav}}'
+#     else:
+#         return None
+# """
+            
+#             # Use CalculateField with code block - this works without where_clause
+#             arcpy.management.CalculateField(
+#                 in_table=temp_fc,
+#                 field="merchav_string",
+#                 expression="get_merchav_string(!merchav!)",
+#                 expression_type="PYTHON3",
+#                 code_block=code_block
+#             )
+                    
+#             self.logger.info("Successfully added merchav_string column")
+#             return temp_fc
+            
+#         except Exception as e:
+#             self.logger.error(f"Error adding merchav mapping: {str(e)}")
+#             return pg_layer
+        
+    def add_merchav_mapping(self, pg_layer):
+        """Add merchav_string and Oid_1 columns using CalculateField"""
+        try:
+            self.logger.info("Adding merchav_string and Oid_1 columns...")
+
             # Check if merchav column exists
             fields = [field.name for field in arcpy.ListFields(pg_layer)]
             if 'merchav' not in fields:
                 self.logger.warning("'merchav' column not found in source table")
                 return pg_layer
-                
-            # Create a temporary feature class with the new column
+
+            # Create a temporary feature class with the new columns
             comparison_dir = os.path.join(TARGET_PATH, COMPARISON_GDB)
             os.makedirs(comparison_dir, exist_ok=True)
             temp_gdb = os.path.join(comparison_dir, "temp_with_merchav.gdb")
-            
+
             # Delete existing GDB if it exists
             if arcpy.Exists(temp_gdb):
                 arcpy.management.Delete(temp_gdb)
-            
+
             # Create new GDB
             arcpy.management.CreateFileGDB(comparison_dir, "temp_with_merchav.gdb")
-            
+
             temp_fc = os.path.join(temp_gdb, "temp_layer")
-            
+
             # Copy the original layer
             arcpy.management.CopyFeatures(pg_layer, temp_fc)
-            
-            # Add the new field
+
+            # Add the new fields
             arcpy.management.AddField(temp_fc, "merchav_string", "TEXT", field_length=50)
-            
+            arcpy.management.AddField(temp_fc, "Oid_1", "LONG")
+
             # Build a code block with the mapping logic
             code_block = f"""
 def get_merchav_string(merchav):
@@ -288,8 +361,8 @@ def get_merchav_string(merchav):
     else:
         return None
 """
-            
-            # Use CalculateField with code block - this works without where_clause
+
+            # Calculate merchav_string field
             arcpy.management.CalculateField(
                 in_table=temp_fc,
                 field="merchav_string",
@@ -297,12 +370,54 @@ def get_merchav_string(merchav):
                 expression_type="PYTHON3",
                 code_block=code_block
             )
-                    
-            self.logger.info("Successfully added merchav_string column")
-            return temp_fc
+
+            # Calculate Oid_1 field with the original OID
+            # oid_field = arcpy.Describe(pg_layer).OIDFieldName
+            # arcpy.management.CalculateField(
+            #     in_table=temp_fc,
+            #     field="Oid_1",
+            #     expression=f"!{oid_field}!",
+            #     expression_type="PYTHON3"
+            # )
+
             
+            # Get original OID values
+            original_oid_field = arcpy.Describe(pg_layer).OIDFieldName
+            original_oid_map = {}
+
+            with arcpy.da.SearchCursor(pg_layer, ["SHAPE@", original_oid_field]) as cursor:
+                for row in cursor:
+                    original_oid_map[row[0].WKT] = row[1]  # Using WKT as a simple geometry key
+
+
+            
+            workspace = temp_gdb  # The GDB where temp_layer resides
+            editor = arcpy.da.Editor(workspace)
+
+            # Start edit session and operation
+            editor.startEditing(False, True)
+            editor.startOperation()
+
+            try:
+                # Update the copied layer
+                with arcpy.da.UpdateCursor(temp_fc, ["SHAPE@", "Oid_1"]) as cursor:
+                    for row in cursor:
+                        geom_wkt = row[0].WKT
+                        if geom_wkt in original_oid_map:
+                            row[1] = original_oid_map[geom_wkt]
+                            cursor.updateRow(row)
+            finally:   
+            # Stop operation and edit session
+                editor.stopOperation()
+                editor.stopEditing(True)
+
+
+
+            self.logger.info("Successfully added merchav_string and Oid_1 columns")
+            return temp_fc
+
         except Exception as e:
-            self.logger.error(f"Error adding merchav mapping: {str(e)}")
+            self.logger.error(f"Error adding merchav mapping and OID_1: {str(e)}")
             return pg_layer
             
     def export_to_dwg(self, source_layer, output_path):

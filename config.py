@@ -8,7 +8,21 @@ ENVIRONMENT = "test"  # "test" or "production"
 
 # Database and table settings
 TABLE_SOURCE = "gis_nafot"
-COLUMNS_FILTER = ["nafa"]
+# COLUMNS_FILTER = ["nafa", "objectid", "objectid_1", "Shape"]
+
+COLUMNS_FILTER=[
+"poly_id",
+"nafaname",
+"mahoz_name",
+"merchav",
+"created_user",
+"created_date",
+"last_edited_user",
+"last_edited_date",
+"machoz",
+"nafa_archaeologist",
+"nafanameeng"
+]
 
 # File paths
 TARGET_PATH = r"U:\IT\eyalSchwarzwald\cad_exports"
