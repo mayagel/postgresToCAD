@@ -2,6 +2,7 @@
 Configuration file for PostgreSQL to DWG conversion project
 """
 import os
+import datetime
 
 # Environment settings
 ENVIRONMENT = "test"  # "test" or "production"
@@ -26,7 +27,21 @@ COLUMNS_FILTER=[
 
 # File paths
 TARGET_PATH = r"U:\IT\eyalSchwarzwald\cad_exports"
-LOG_PATH = r"U:\IT\eyalSchwarzwald\cad_exports\logs"
+
+# Define the log file path with placeholders for year, month, day
+log_file_path = os.path.join(r"C:\AutoTasks\logs", "{year}", "{month}", "{day}")
+
+# Get current date
+current_date = datetime.datetime.now()
+
+# Format year, month, day for path
+year_str = current_date.strftime("%Y")
+month_str = current_date.strftime("%m")
+day_str = current_date.strftime("%d")
+# Create the complete log file path
+complete_log_file_path = log_file_path.format(year=year_str, month=month_str, day=day_str)
+
+# LOG_PATH = r"U:\IT\eyalSchwarzwald\cad_exports\logs"
 DWG_FILE_NAME = "GIS_NAFOT_ExportCAD.dwg"
 COMPARISON_GDB = "comparison"
 

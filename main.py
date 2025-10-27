@@ -1,10 +1,7 @@
 """
 Main script for PostgreSQL to DWG conversion with enhanced feature class handling
 """
-import os
 import sys
-import logging
-from datetime import datetime
 import arcpy
 from config import *
 from postgres_to_dwg_converter import PostgresToDWGConverter
