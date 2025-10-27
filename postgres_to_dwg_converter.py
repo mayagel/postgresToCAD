@@ -9,9 +9,7 @@ import sys
 import logging
 from datetime import datetime
 from config import *
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+
 
 def _to_2d(geom: arcpy.Geometry) -> arcpy.Geometry:
     """Return a 2D version of the geometry (drops Z and M) preserving SR."""
@@ -512,49 +510,7 @@ def get_merchav_string(merchav):
         except Exception as e:
             self.logger.error(f"Error exporting to DWG: {str(e)}")
             raise
-            
-    def send_notification_email(self):
-        """Send email notification about updates"""
-        try:
-            if not self.changes_found:
-                self.logger.info("No changes found - no email notification needed")
-                return
-                
-            # Create email content
-            subject = f"Update in {TABLE_SOURCE} - New DWG file created"
-            
-            update_summary = "\n".join(self.update_details) if self.update_details else "Changes detected in geometry or attributes"
-            
-            body = f"""
-Update in {TABLE_SOURCE} was found. {update_summary}
 
-Creating new DWG file in {TARGET_PATH}
-
-To see full log file please open {LOG_PATH}\\{os.path.basename(logging.getLogger().handlers[0].baseFilename)}
-            """
-            
-            # Create message
-            msg = MIMEMultipart()
-            msg['From'] = SMTP_USER
-            msg['To'] = ", ".join(EMAIL_GROUP)
-            msg['Subject'] = subject
-            msg.attach(MIMEText(body, 'plain'))
-            
-            # Send email
-            if ENVIRONMENT == "production":
-                self.logger.info("Production environment - email settings are placeholders")
-                self.logger.info(f"Would send email to: {EMAIL_GROUP}")
-                self.logger.info(f"Subject: {subject}")
-                self.logger.info(f"Body: {body}")
-            else:
-                # For test environment, just log the email
-                self.logger.info(f"Test environment - email would be sent to: {EMAIL_GROUP}")
-                self.logger.info(f"Subject: {subject}")
-                self.logger.info(f"Body: {body}")
-                
-        except Exception as e:
-            self.logger.error(f"Error sending email notification: {str(e)}")
-            
     def run_conversion(self):
         """Main conversion process"""
         try:
@@ -580,11 +536,11 @@ To see full log file please open {LOG_PATH}\\{os.path.basename(logging.getLogger
                 # Export to DWG
                 self.export_to_dwg(enhanced_layer, dwg_path)
                 
-                # Send notification email ONLY if changes were found (not for first run without existing DWG)
-                if changes_found:
-                    self.send_notification_email()
-                else:
-                    self.logger.info("First run - DWG created but no email sent")
+                # !!Send notification email ONLY if changes were found (not for first run without existing DWG)
+                # if changes_found:
+                #     self.send_notification_email()
+                # else:
+                #     self.logger.info("First run - DWG created but no email sent")
                 
                 self.logger.info("Conversion process completed successfully")
             else:
