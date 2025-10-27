@@ -12,7 +12,6 @@ from config import *
 from db_utils import DatabaseManager
 from gdb_utils import GDBManager
 from dwg_utils import DWGManager
-from email_utils import EmailNotifier
 from comparison_utils import ComparisonManager
 
 class PostgresToDWGConverter:
@@ -21,7 +20,6 @@ class PostgresToDWGConverter:
         self.db_manager = DatabaseManager()
         self.gdb_manager = GDBManager()
         self.dwg_manager = DWGManager()
-        self.email_notifier = EmailNotifier()
         self.comparison_manager = ComparisonManager()
         
     def setup_logging(self):
@@ -156,11 +154,11 @@ class PostgresToDWGConverter:
             
             full_message = f"{message}\n\nTo see full log file, please open: {os.path.join(LOG_PATH, latest_log)}"
             
-            self.email_notifier.send_email(
-                to_addresses=EMAIL_GROUP,
-                subject=f"Update in {TABLE_SOURCE} - {subject}",
-                body=full_message
-            )
+            # self.email_notifier.send_email(
+            #     to_addresses=EMAIL_GROUP,
+            #     subject=f"Update in {TABLE_SOURCE} - {subject}",
+            #     body=full_message
+            # )
             self.logger.info("Email notification sent successfully")
             
         except Exception as e:
